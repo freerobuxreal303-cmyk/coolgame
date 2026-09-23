@@ -1,30 +1,65 @@
 # 🚀 ZERO-G TACTICS: CHRONO LEGENDS
-> **2D Action-Tactical Time-Loop Platformer / Hero Arena**  
-> *Clone Armies* (Time-loop recording & replay) × Zero-Gravity Newtonian Physics × *Mobile Legends: Bang Bang* (Hero synergies)
+> **2D Action-Tactical Time-Loop Side-Scroller / Hero Arena**  
+> *Clone Armies* (Synchronous frame-by-frame time-loop replay) × 2D Zero-Gravity Newtonian Physics × *Mobile Legends: Bang Bang* (Hero synergies)
 
+[![Play in Browser](https://img.shields.io/badge/🎮%20PLAY%20ONLINE-GitHub%20Pages-success?style=for-the-badge)](https://freerobuxreal303-cmyk.github.io/coolgame/)
+[![Download ZIP](https://img.shields.io/badge/📦%20DOWNLOAD%20GAME.ZIP-Windows%20Executable-blue?style=for-the-badge)](https://github.com/freerobuxreal303-cmyk/coolgame/raw/main/ZeroG-Tactics-Windows.zip)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Web-blue.svg)](#)
-[![Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
-[![License](https://img.shields.io/badge/license-MIT-purple.svg)](#)
 [![Class](https://img.shields.io/badge/Project-Game%20Canvas%20Kelas%2012-orange.svg)](#)
 
 ---
 
-## 🎮 What is Zero-G Tactics: Chrono Legends?
+## ⚡ PLAY INSTANTLY (NO INSTALLATION OR FOLDER BROWSING NEEDED)
 
-**Zero-G Tactics: Chrono Legends** is an innovative 2D tactical action combat game where you command a 5-hero squad across iterative timeline loops. Every round, you pilot a single hero champion in real-time. When that champion dies or the 30-second loop clock expires, time resets to $T=0$. You respawn as a new hero, fighting alongside full-fidelity replays of all your previously recorded runs!
+### 🌐 1. Play Directly in Your Web Browser (Instant 1-Click Play)
+You do not need to download or browse folders! Simply click the link below to play instantly:
+👉 **[https://freerobuxreal303-cmyk.github.io/coolgame/](https://freerobuxreal303-cmyk.github.io/coolgame/)**
 
-Combat takes place in the zero-gravity **Celestial Sanctuary**, featuring directional RCS thrusters, recoil-based weapon propulsion, gravity-inversion singularity wells, repulsor bounce pads, destructible barriers, and automated defense turrets.
+*(Works immediately on Google Chrome, Microsoft Edge, Firefox, Safari, and Mobile!)*
+
+---
+
+### 📦 2. Download Standalone Windows ZIP
+If you want the offline standalone desktop version:
+1. Click **[Download ZeroG-Tactics-Windows.zip](https://github.com/freerobuxreal303-cmyk/coolgame/raw/main/ZeroG-Tactics-Windows.zip)**.
+2. Extract the ZIP and double-click **`game.exe`** (or **`run-game.bat`**).
+
+---
+
+## 🎮 Game Concept & Core Structure
+
+**Zero-G Tactics: Chrono Legends** is an orthographic 2D side-scrolling tactical combat game where you command a 5-hero squad across iterative timeline loops:
+
+- **Run 1:** You spawn at your base on the far-left as Hero #1. You move right, shoot, use abilities, and battle until dying or until the 30-second turn clock expires. Every single input vector, aim angle, and action is recorded frame-by-frame.
+- **Run 2:** You respawn as Hero #2. Simultaneously, your recorded Hero #1 clone spawns in the 2D arena beside you and executes its exact recorded trajectory and weapon discharges!
+- **Run N:** You build an entire synchronized army of past clones fighting alongside your current active hero on the same 2D side-scrolling screen.
 
 ```
-+-----------------------------------------------------------------------------------+
-|                              CHRONO-LOOP TIMELINE                                 |
-+-----------------------------------------------------------------------------------+
-| Loop 1: [Tank]      --> Hooks Defender + Deploys Grav-Anchor (Dies at T=18s)      |
-| Loop 2: [Mage]      --> Drops Singularity Vortex into Tank's Anchor (T=15s-20s)   |
-| Loop 3: [Marksman]  --> Snipes clumped enemies; Recoil drifts behind Tank's Cover  |
-| Loop 4: [Assassin]  --> Grapple-swings off Marksman's bullet path to core base    |
-| Loop 5: [Support]   --> Chrono-Tethers Loop 1 Tank, preventing his death at T=18s!|
-+-----------------------------------------------------------------------------------+
++====================================================================================================================+
+| [CELESTIAL PALACE: 2D SIDE-SCROLLING ARENA LAYOUT]                                                                |
++====================================================================================================================+
+| Y=0 (Deep Space Ceiling)                                                                                           |
+|                                                                                                                    |
+| [PLAYER BASE]                [Top Lane: Floating Light-Bridges]                          [ENEMY BASE]              |
+|  Launch Pod                   =================      =================                    Launch Pod               |
+|  (X=140, Y=550)                     \                               /                     (X=2260, Y=550)          |
+|                                [Top Turret T1]              [Enemy Turret T1]                                      |
+|     +---------------+          (X=550, Y=320)               (X=1850, Y=320)         +---------------+              |
+|     |  HOME NEXUS   |                                                               | ENEMY MATRIX  |              |
+|     |     CORE      |             [Mid Lane: Destructible Crystal Barricades]       |     CORE      |              |
+|     |  (10,000 HP)  |             ====== [Crystal 1]    [Crystal 2] ======          |  (10,000 HP)  |              |
+|     +---------------+                       \                  /                    +---------------+              |
+|                                           ( * ) GRAVITY WELL ( * )                                                 |
+|                                                (X=1200, Y=550)                                                     |
+|                                                                                                                    |
+|                                [Bot Turret T2]              [Enemy Turret T2]                                      |
+|                                (X=550, Y=780)               (X=1850, Y=780)                                        |
+|                                     /                               \                                              |
+|                              =================      =================                                              |
+|                             [Bottom Lane: Heavy-G Magnetic Plating]                                                |
+|                                                                                                                    |
+| Y=1100 (Abyssal Void Floor)                                                                                        |
++====================================================================================================================+
 ```
 
 ---
@@ -33,22 +68,23 @@ Combat takes place in the zero-gravity **Celestial Sanctuary**, featuring direct
 
 | Input | Action | Description |
 | :--- | :--- | :--- |
-| **W, A, S, D** / Arrows | **RCS Thrusters** | Directional propulsion in zero gravity |
-| **Mouse Cursor** | **Aim Angle** | 360° aiming reticle independent of drift vector |
+| **W, A, S, D** / Arrows | **RCS Thrusters** | Directional propulsion in 2D zero gravity |
+| **Mouse Cursor** | **360° Aiming** | Aiming reticle independent of drift vector |
 | **Left Click** / **J** | **Basic Attack** | Primary weapon discharge (generates reverse Newtonian recoil) |
 | **Right Click** / **Q** / **K** | **Tactical Skill** | Hero special ability (Hook, Cables, Mines, Stasis, Shield) |
-| **E** / **R** / **L** | **Ultimate Ability** | Catastrophic tactical ultimate (Implosion, Lasers, Black Hole) |
-| **Shift** (Hold/Toggle) | **Drift Mode** | Disables RCS damping; preserves 100% velocity for kiting |
-| **Space** / **G** | **Magnetic Anchor** | Locks boots to platform surface; immune to knockback |
+| **E** / **R** / **L** | **Ultimate Ability** | Catastrophic ultimate (Implosion, Lasers, Black Hole) |
+| **Shift** (Hold/Toggle) | **Newton Drift** | Disables RCS damping; preserves 100% velocity for kiting |
+| **Space** / **G** | **Magnetic Anchor** | Clamps boots to platform surface; immune to knockback |
+| **H** | **Help Overlay** | Toggle Command Briefing HUD overlay |
 
 ---
 
-## ⚡ 5 MLBB-Inspired Hero Archetypes
+## ⚡ 5 MLBB-Inspired 2D Hero Archetypes
 
-### 1. 🛡️ Iron Wall Ares (Tank) — *Inspired by Tigreal & Franco*
+### 1. 🛡️ Iron Wall Ares (Tank) — *Inspired by Franco & Tigreal*
 - **Role:** Frontline vanguard & hazard displacement (HP: 3,200 | Mass: 180 kg)
 - **Passive - Kinetic Anchor:** Anchors onto platforms, rendering him immune to knockbacks and singularity wells.
-- **Skill - Grav-Harpoon:** Electromagnetic hook pulling enemies into hazards or pulling Ares to walls.
+- **Skill - Grav-Harpoon:** Electromagnetic hook pulling enemies into hazards or pulling Ares to platforms.
 - **Ultimate - Singularity Bastion:** Frontal barrier absorbing shots, followed by a gravitational implosion sucking and stunning all enemies.
 
 ### 2. ⚡ Vectra (Assassin) — *Inspired by Fanny & Gusion*
@@ -65,7 +101,7 @@ Combat takes place in the zero-gravity **Celestial Sanctuary**, featuring direct
 
 ### 4. 🔮 Orion (Mage) — *Inspired by Eudora & Cyclops*
 - **Role:** Spatial control & lockdown (HP: 1,750 | Mass: 75 kg)
-- **Passive - Planetary Gravitation:** Orbiting celestial spheres shielding and auto-targeting nearby foes.
+- **Passive - Planetary Gravitation:** 3 orbiting celestial spheres shielding and auto-targeting nearby foes.
 - **Skill - Stasis Orb:** Freezes enemy velocity to 0 and disables weapons for 1.8 seconds.
 - **Ultimate - Event Horizon:** Micro-black-hole creating intense radial gravity suction before collapsing in a supernova.
 
@@ -77,32 +113,13 @@ Combat takes place in the zero-gravity **Celestial Sanctuary**, featuring direct
 
 ---
 
-## 🏗️ Architecture & Technical Features
+## 🏗️ Architecture & Features
 
-- **Standalone Executable (`game.exe`):** Native Windows launcher compiled with .NET `csc.exe`, starting an embedded local HTTP server and launching an isolated borderless desktop app window.
-- **Deterministic 60Hz Physics Engine (`src/engine/physics.js`):** Fixed-timestep Verlet integration, Newtonian recoil momentum, gravity wells, and elastic bounce bumpers ($1.35\times$ kinetic multiplier).
-- **Time-Loop Input Stream Recorder (`src/engine/chrono.js`):** 60Hz input frame serialization, multi-clone playback manager, and telemetry drift reconciliation.
-- **Procedural WebAudio Synthesizer (`src/engine/audio.js`):** Built-in zero-G sound synthesizer (filtered suit thrusters, railgun thumps, stasis pings, and rewind sweeps) requiring 0 external sound files.
-- **Cyberpunk Particle VFX (`src/engine/particles.js`):** Dynamic thruster plumes, laser beams, black hole distortion shaders, and clone chromatic trails.
-
----
-
-## 🚀 How to Run
-
-### Method 1: Run the Standalone Game Executable (Easiest)
-Simply double-click **`game.exe`** in this folder!
-
-### Method 2: Open Directly in Web Browser
-Open **`index.html`** in Google Chrome, Microsoft Edge, Firefox, or Safari.
-
-### Method 3: Using Node / NPM
-```bash
-npm start
-```
-Or to recompile `game.exe`:
-```bash
-npm run build:exe
-```
+- **2D Fixed 60Hz Physics Engine:** Deterministic Verlet integration with Newtonian momentum and elastic bounce pads.
+- **Time-Loop Input Stream Recorder:** Serializes 60Hz input frames and replays multi-clone squads without desync.
+- **Tactical Radar Minimap:** Live top-center radar displaying cores, turrets, hero, friendly clones, and enemies.
+- **Floating Combat Damage Numbers:** Arcade damage feedback with critical hits and status effects.
+- **Procedural WebAudio Synthesizer:** Built-in space audio (thrusters, railguns, black holes, rewind sweep) requiring 0 external audio files.
 
 ---
 
