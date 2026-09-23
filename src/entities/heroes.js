@@ -11,11 +11,12 @@ class Projectile {
     this.damage = opt.damage || 150;
     this.team = opt.team || 'player'; // 'player' or 'enemy'
     this.life = opt.life || 2.5;
+    this.maxLife = this.life;
     this.color = opt.color || '#00ffff';
     this.source = opt.source || null;
-    this.type = opt.type || 'bullet'; // 'bullet', 'mine', 'stasis', 'dagger', 'harpoon', 'heal'
+    this.type = opt.type || 'bullet'; // 'bullet', 'mine', 'stasis', 'dagger', 'harpoon', 'chrono_dart'
     this.homing = opt.homing || false;
-    this.homingTarget = null;
+    this.returning = false;
     this.isDead = false;
     this.extra = opt.extra || {};
   }
@@ -27,10 +28,29 @@ class Projectile {
       return;
     }
 
+    // Vectra dagger recall mechanic
+    if (this.type === 'dagger' && this.source && !this.source.isDead) {
+      if (this.life < this.maxLife * 0.55 && !this.returning) {
+        this.returning = true;
+      }
+      if (this.returning) {
+        const dx = this.source.pos.x - this.x;
+        const dy = this.source.pos.y - this.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const returnSpeed = 1000;
+        this.vx = (dx / d) * returnSpeed;
+        this.vy = (dy / d) * returnSpeed;
+        if (d < 25) {
+          this.isDead = true;
+          return;
+        }
+      }
+    }
+
     // Homing behavior for Orion or special projectiles
     if (this.homing && enemies && enemies.length > 0) {
       let nearest = null;
-      let minDist = 400;
+      let minDist = 450;
       for (const e of enemies) {
         if (e.isDead || e.team === this.team) continue;
         const d = Math.hypot(e.pos.x - this.x, e.pos.y - this.y);
@@ -43,7 +63,7 @@ class Projectile {
         const targetAngle = Math.atan2(nearest.pos.y - this.y, nearest.pos.x - this.x);
         const curAngle = Math.atan2(this.vy, this.vx);
         const diff = Math.atan2(Math.sin(targetAngle - curAngle), Math.cos(targetAngle - curAngle));
-        const newAngle = curAngle + diff * Math.min(1, dt * 6);
+        const newAngle = curAngle + diff * Math.min(1, dt * 7);
         const speed = Math.hypot(this.vx, this.vy);
         this.vx = Math.cos(newAngle) * speed;
         this.vy = Math.sin(newAngle) * speed;
@@ -60,8 +80,16 @@ class Projectile {
         if (this.x >= p.x && this.x <= p.x + p.w && this.y >= p.y && this.y <= p.y + p.h) {
           if (p.isDestructible) {
             p.hp -= this.damage;
-            if (p.hp <= 0) p.destroy(world);
+            if (p.hp <= 0) p.active = false;
           }
+
+          // Ares terrain grappling hook: pulls Ares to platform!
+          if (this.type === 'harpoon' && this.source && !this.source.isDead && this.source.id === 'ares') {
+            const pullDir = new Vec2(this.x - this.source.pos.x, this.y - this.source.pos.y).normalize();
+            this.source.applyImpulse(new Vec2(pullDir.x * 32000, pullDir.y * 32000));
+            if (window.soundEngine) window.soundEngine.playHook();
+          }
+
           this.isDead = true;
           return;
         }
@@ -75,7 +103,7 @@ class Projectile {
 
     if (this.type === 'mine') {
       ctx.fillStyle = '#ffaa00';
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = 10;
       ctx.shadowColor = '#ff5500';
       ctx.beginPath();
       ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -87,31 +115,31 @@ class Projectile {
       const angle = Math.atan2(this.vy, this.vx);
       ctx.rotate(angle);
       ctx.fillStyle = '#b388ff';
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 12;
       ctx.shadowColor = '#d500f9';
       ctx.beginPath();
-      ctx.moveTo(12, 0);
-      ctx.lineTo(-8, -4);
-      ctx.lineTo(-4, 0);
-      ctx.lineTo(-8, 4);
+      ctx.moveTo(14, 0);
+      ctx.lineTo(-9, -5);
+      ctx.lineTo(-5, 0);
+      ctx.lineTo(-9, 5);
       ctx.closePath();
       ctx.fill();
     } else if (this.type === 'harpoon') {
       const angle = Math.atan2(this.vy, this.vx);
       ctx.rotate(angle);
-      ctx.fillStyle = '#ffcc00';
-      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffea00';
+      ctx.shadowBlur = 14;
       ctx.shadowColor = '#ffbb00';
       ctx.beginPath();
-      ctx.moveTo(14, 0);
-      ctx.lineTo(-6, -6);
-      ctx.lineTo(-2, 0);
-      ctx.lineTo(-6, 6);
+      ctx.moveTo(16, 0);
+      ctx.lineTo(-7, -7);
+      ctx.lineTo(-3, 0);
+      ctx.lineTo(-7, 7);
       ctx.closePath();
       ctx.fill();
     } else {
       ctx.fillStyle = this.color;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 14;
       ctx.shadowColor = this.color;
       ctx.beginPath();
       ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -144,7 +172,7 @@ class Hero extends RigidBody {
     this.shield = 0;
     this.maxShield = heroConfig.shield || 400;
 
-    this.thrustForce = heroConfig.thrust || 18000;
+    this.thrustForce = heroConfig.thrust || 19000;
     this.aimAngle = 0;
     this.fuel = 100;
     this.maxFuel = 100;
@@ -159,16 +187,15 @@ class Hero extends RigidBody {
 
     // Status effects
     this.stunTimer = 0;
-    this.tetherTarget = null;
     this.color = heroConfig.color || '#00e5ff';
     this.secondaryColor = heroConfig.secondaryColor || '#ffffff';
 
     // Hero-specific states
     this.cables = []; // For Vectra
-    this.daggers = []; // For Vectra
-    this.orbitingSpheres = 3; // For Orion
+    this.orbitAngle = 0; // For Orion
     this.bastionShieldActive = false; // For Ares
     this.bastionTimer = 0;
+    this.auraPulse = 0; // For Chronia
   }
 
   isStunned() {
@@ -176,17 +203,18 @@ class Hero extends RigidBody {
   }
 
   takeDamage(amount, source) {
-    if (this.isDead) return;
+    if (this.isDead) return 0;
 
     // Check Ares bastion shield absorption
     if (this.bastionShieldActive) {
       amount *= 0.3; // 70% damage reduction
     }
 
+    let actualDamage = amount;
     if (this.shield > 0) {
       if (this.shield >= amount) {
         this.shield -= amount;
-        return;
+        return actualDamage;
       } else {
         amount -= this.shield;
         this.shield = 0;
@@ -199,15 +227,17 @@ class Hero extends RigidBody {
       this.isDead = true;
       if (window.soundEngine) window.soundEngine.playExplosion(true);
     }
+    return actualDamage;
   }
 
   heal(amount) {
-    if (this.isDead) return;
+    if (this.isDead) return 0;
+    const prev = this.hp;
     this.hp = Math.min(this.maxHp, this.hp + amount);
-    if (window.soundEngine) window.soundEngine.playHeal();
+    return this.hp - prev;
   }
 
-  updateHero(dt, input, world, projectiles, particleSystem) {
+  updateHero(dt, input, world, projectiles, particleSystem, allies) {
     if (this.isDead) return;
 
     // Tick cooldowns
@@ -220,26 +250,29 @@ class Hero extends RigidBody {
     }
 
     // Regulate fuel
-    if (input.thrust.x !== 0 || input.thrust.y !== 0) {
-      this.fuel = Math.max(0, this.fuel - 12 * dt);
+    const isThrustInput = input && input.thrust && (input.thrust.x !== 0 || input.thrust.y !== 0);
+    if (isThrustInput) {
+      this.fuel = Math.max(0, this.fuel - 14 * dt);
     } else {
-      this.fuel = Math.min(this.maxFuel, this.fuel + 25 * dt);
+      this.fuel = Math.min(this.maxFuel, this.fuel + 28 * dt);
     }
 
     // Toggle drift mode (Shift key)
-    this.driftMode = input.driftMode;
+    this.driftMode = input ? !!input.driftMode : false;
 
     // Aim angle update
-    this.aimAngle = input.aimAngle;
+    if (input && input.aimAngle !== undefined) {
+      this.aimAngle = input.aimAngle;
+    }
 
     // Apply thrust if fuel is available
-    if (this.fuel > 0 && (input.thrust.x !== 0 || input.thrust.y !== 0)) {
+    if (this.fuel > 0 && isThrustInput) {
       const thrustVec = new Vec2(input.thrust.x, input.thrust.y).normalize();
       const fx = thrustVec.x * this.thrustForce;
       const fy = thrustVec.y * this.thrustForce;
       this.applyForce(new Vec2(fx, fy));
 
-      if (this.isAnchored && (input.thrust.x !== 0 || input.thrust.y !== 0)) {
+      if (this.isAnchored) {
         this.isAnchored = false; // Thrust breaks anchor
       }
 
@@ -251,7 +284,7 @@ class Hero extends RigidBody {
     }
 
     // Clones generate temporal trails
-    if (this.isClone && particleSystem && Math.random() < 0.4) {
+    if (this.isClone && particleSystem && Math.random() < 0.35) {
       particleSystem.emitChronoTrail(this.pos.x, this.pos.y, this.color);
     }
 
@@ -266,42 +299,68 @@ class Hero extends RigidBody {
           world.gravityWells.push({
             x: this.pos.x,
             y: this.pos.y,
-            radius: 350,
-            strength: 900000,
+            radius: 360,
+            strength: 950000,
             active: true,
-            timer: 0.8,
+            timer: 0.9,
           });
         }
       }
     }
 
-    // Cable physics for Vectra
-    if (this.cables.length > 0) {
-      for (const cable of this.cables) {
-        const dx = cable.anchor.x - this.pos.x;
-        const dy = cable.anchor.y - this.pos.y;
-        const d = Math.hypot(dx, dy);
-        if (d > 20) {
-          const pull = 26000;
-          this.applyForce(new Vec2((dx / d) * pull, (dy / d) * pull));
+    // Chronia Causality Aura: Heals and buffs nearby friendly clones
+    if (this.id === 'chronia' && allies) {
+      this.auraPulse += dt * 3;
+      for (const ally of allies) {
+        if (ally.isDead || ally === this || ally.team !== this.team) continue;
+        const d = Math.hypot(ally.pos.x - this.pos.x, ally.pos.y - this.pos.y);
+        if (d < 220) {
+          ally.heal(55 * dt);
+          if (particleSystem && Math.random() < 0.1) {
+            particleSystem.emitSparks(ally.pos.x, ally.pos.y, 2, '#00ffc2');
+          }
         }
       }
     }
 
+    // Orion orbiting spheres animation
+    if (this.id === 'orion') {
+      this.orbitAngle += dt * 2.8;
+    }
+
+    // Deterministic Cable physics for Vectra (tick delta based, no setTimeout)
+    for (let i = this.cables.length - 1; i >= 0; i--) {
+      const cable = this.cables[i];
+      cable.life -= dt;
+      if (cable.life <= 0) {
+        this.cables.splice(i, 1);
+        continue;
+      }
+      const dx = cable.anchor.x - this.pos.x;
+      const dy = cable.anchor.y - this.pos.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 25) {
+        const pull = 28000;
+        this.applyForce(new Vec2((dx / d) * pull, (dy / d) * pull));
+      }
+    }
+
     // Perform hero abilities based on input
-    if (input.basicAttack && this.basicAttackCd <= 0) {
-      this.executeBasicAttack(projectiles, particleSystem, world);
-      this.basicAttackCd = this.basicAttackRate;
-    }
+    if (input) {
+      if (input.basicAttack && this.basicAttackCd <= 0) {
+        this.executeBasicAttack(projectiles, particleSystem, world);
+        this.basicAttackCd = this.basicAttackRate;
+      }
 
-    if (input.tacticalSkill && this.tacticalCd <= 0) {
-      this.executeTacticalSkill(projectiles, particleSystem, world);
-      this.tacticalCd = this.maxTacticalCd;
-    }
+      if (input.tacticalSkill && this.tacticalCd <= 0) {
+        this.executeTacticalSkill(projectiles, particleSystem, world);
+        this.tacticalCd = this.maxTacticalCd;
+      }
 
-    if (input.ultimate && this.ultimateCd <= 0) {
-      this.executeUltimate(projectiles, particleSystem, world);
-      this.ultimateCd = this.maxUltimateCd;
+      if (input.ultimate && this.ultimateCd <= 0) {
+        this.executeUltimate(projectiles, particleSystem, world);
+        this.ultimateCd = this.maxUltimateCd;
+      }
     }
   }
 
@@ -311,35 +370,35 @@ class Hero extends RigidBody {
     if (this.id === 'ares') {
       // Gauss Hammer: Melee arc shockwave
       if (window.soundEngine) window.soundEngine.playRecoil();
-      const slashX = this.pos.x + aimVec.x * 35;
-      const slashY = this.pos.y + aimVec.y * 35;
+      const slashX = this.pos.x + aimVec.x * 38;
+      const slashY = this.pos.y + aimVec.y * 38;
       projectiles.push(new Projectile({
         x: slashX,
         y: slashY,
-        vx: aimVec.x * 300,
-        vy: aimVec.y * 300,
-        radius: 28,
-        damage: 240,
+        vx: aimVec.x * 320,
+        vy: aimVec.y * 320,
+        radius: 30,
+        damage: 260,
         team: this.team,
         life: 0.18,
         color: '#ffbb00',
         source: this,
       }));
-      if (particleSystem) particleSystem.emitSparks(slashX, slashY, 12, '#ffbb00');
+      if (particleSystem) particleSystem.emitSparks(slashX, slashY, 14, '#ffbb00');
     } else if (this.id === 'vectra') {
       // Plasma Edge: Spinning 360 blades
       if (window.soundEngine) window.soundEngine.playDagger();
       const speed = this.vel.mag();
-      const bonusDmg = speed > 300 ? 150 : 0;
+      const bonusDmg = speed > 280 ? 160 : 0;
       projectiles.push(new Projectile({
         x: this.pos.x,
         y: this.pos.y,
-        vx: aimVec.x * 200,
-        vy: aimVec.y * 200,
-        radius: 36,
-        damage: 220 + bonusDmg,
+        vx: aimVec.x * 220,
+        vy: aimVec.y * 220,
+        radius: 38,
+        damage: 230 + bonusDmg,
         team: this.team,
-        life: 0.15,
+        life: 0.16,
         color: '#d500f9',
         source: this,
       }));
@@ -350,14 +409,14 @@ class Hero extends RigidBody {
         window.soundEngine.playLaser(1.1);
         window.soundEngine.playRecoil();
       }
-      const pSpeed = 1100;
+      const pSpeed = 1150;
       projectiles.push(new Projectile({
         x: this.pos.x + aimVec.x * 25,
         y: this.pos.y + aimVec.y * 25,
         vx: aimVec.x * pSpeed,
         vy: aimVec.y * pSpeed,
         radius: 6,
-        damage: 320,
+        damage: 340,
         team: this.team,
         life: 2.2,
         color: '#00f3ff',
@@ -365,20 +424,20 @@ class Hero extends RigidBody {
       }));
 
       // NEWTONIAN RECOIL: kicks Artemis backward!
-      this.applyRecoil(new Vec2(aimVec.x * 24000, aimVec.y * 24000));
+      this.applyRecoil(new Vec2(aimVec.x * 26000, aimVec.y * 26000));
       if (particleSystem) {
         particleSystem.emitThruster(this.pos.x, this.pos.y, this.aimAngle, '#00f3ff');
       }
     } else if (this.id === 'orion') {
       // Quantum Pulse: Homing plasma orb
-      if (window.soundEngine) window.soundEngine.playLaser(0.7);
+      if (window.soundEngine) window.soundEngine.playLaser(0.75);
       projectiles.push(new Projectile({
-        x: this.pos.x + aimVec.x * 20,
-        y: this.pos.y + aimVec.y * 20,
-        vx: aimVec.x * 450,
-        vy: aimVec.y * 450,
+        x: this.pos.x + aimVec.x * 22,
+        y: this.pos.y + aimVec.y * 22,
+        vx: aimVec.x * 480,
+        vy: aimVec.y * 480,
         radius: 9,
-        damage: 200,
+        damage: 210,
         team: this.team,
         life: 3.0,
         color: '#7c4dff',
@@ -391,10 +450,10 @@ class Hero extends RigidBody {
       projectiles.push(new Projectile({
         x: this.pos.x + aimVec.x * 20,
         y: this.pos.y + aimVec.y * 20,
-        vx: aimVec.x * 650,
-        vy: aimVec.y * 650,
+        vx: aimVec.x * 680,
+        vy: aimVec.y * 680,
         radius: 7,
-        damage: 160,
+        damage: 170,
         team: this.team,
         life: 2.0,
         color: '#00ffc2',
@@ -413,12 +472,12 @@ class Hero extends RigidBody {
       projectiles.push(new Projectile({
         x: this.pos.x + aimVec.x * 25,
         y: this.pos.y + aimVec.y * 25,
-        vx: aimVec.x * 850,
-        vy: aimVec.y * 850,
+        vx: aimVec.x * 900,
+        vy: aimVec.y * 900,
         radius: 12,
-        damage: 180,
+        damage: 190,
         team: this.team,
-        life: 0.8,
+        life: 0.85,
         color: '#ffea00',
         type: 'harpoon',
         source: this,
@@ -426,42 +485,38 @@ class Hero extends RigidBody {
     } else if (this.id === 'vectra') {
       // Steel Cable: Launches wire toward obstacle/platform
       if (window.soundEngine) window.soundEngine.playCable();
-      // Raycast to find nearest platform
       let hitPoint = null;
-      let minRayDist = 600;
-      for (let r = 20; r < 600; r += 20) {
+      for (let r = 30; r < 650; r += 20) {
         const testX = this.pos.x + aimVec.x * r;
         const testY = this.pos.y + aimVec.y * r;
         for (const p of world.platforms) {
           if (!p.active) continue;
           if (testX >= p.x && testX <= p.x + p.w && testY >= p.y && testY <= p.y + p.h) {
             hitPoint = { x: testX, y: testY };
-            minRayDist = r;
             break;
           }
         }
         if (hitPoint) break;
       }
       if (!hitPoint) {
-        hitPoint = { x: this.pos.x + aimVec.x * 450, y: this.pos.y + aimVec.y * 450 };
+        hitPoint = { x: this.pos.x + aimVec.x * 480, y: this.pos.y + aimVec.y * 480 };
       }
-      this.cables.push({ anchor: hitPoint, life: 1.2 });
-      setTimeout(() => { this.cables = []; }, 1100);
-      this.applyImpulse(new Vec2(aimVec.x * 22000, aimVec.y * 22000));
+      this.cables.push({ anchor: hitPoint, life: 1.1 });
+      this.applyImpulse(new Vec2(aimVec.x * 24000, aimVec.y * 24000));
     } else if (this.id === 'artemis') {
       // RCS Retro-Burst & Mines
       if (window.soundEngine) window.soundEngine.playRecoil();
-      this.applyImpulse(new Vec2(-aimVec.x * 18000, -aimVec.y * 18000));
+      this.applyImpulse(new Vec2(-aimVec.x * 20000, -aimVec.y * 20000));
       for (let i = 0; i < 3; i++) {
-        const spread = (i - 1) * 0.4;
+        const spread = (i - 1) * 0.45;
         const angle = this.aimAngle + Math.PI + spread;
         projectiles.push(new Projectile({
           x: this.pos.x,
           y: this.pos.y,
-          vx: Math.cos(angle) * 120,
-          vy: Math.sin(angle) * 120,
+          vx: Math.cos(angle) * 130,
+          vy: Math.sin(angle) * 130,
           radius: 8,
-          damage: 260,
+          damage: 280,
           team: this.team,
           life: 8.0,
           type: 'mine',
@@ -474,10 +529,10 @@ class Hero extends RigidBody {
       projectiles.push(new Projectile({
         x: this.pos.x + aimVec.x * 25,
         y: this.pos.y + aimVec.y * 25,
-        vx: aimVec.x * 600,
-        vy: aimVec.y * 600,
+        vx: aimVec.x * 620,
+        vy: aimVec.y * 620,
         radius: 14,
-        damage: 150,
+        damage: 160,
         team: this.team,
         life: 2.0,
         color: '#00e5ff',
@@ -487,8 +542,8 @@ class Hero extends RigidBody {
     } else if (this.id === 'chronia') {
       // Temporal Stasis Barrier
       if (window.soundEngine) window.soundEngine.playHeal();
-      this.shield = Math.min(this.maxShield, this.shield + 600);
-      if (particleSystem) particleSystem.emitSparks(this.pos.x, this.pos.y, 20, '#00ffc2');
+      this.shield = Math.min(this.maxShield, this.shield + 650);
+      if (particleSystem) particleSystem.emitSparks(this.pos.x, this.pos.y, 22, '#00ffc2');
     }
   }
 
@@ -500,7 +555,7 @@ class Hero extends RigidBody {
       this.bastionShieldActive = true;
       this.bastionTimer = 1.0;
       if (window.soundEngine) window.soundEngine.playSingularity();
-      if (particleSystem) particleSystem.emitSparks(this.pos.x, this.pos.y, 25, '#ffd700');
+      if (particleSystem) particleSystem.emitSparks(this.pos.x, this.pos.y, 28, '#ffd700');
     } else if (this.id === 'vectra') {
       // Shadowburst Matrix: 5 kinetic daggers
       if (window.soundEngine) window.soundEngine.playDagger();
@@ -509,12 +564,12 @@ class Hero extends RigidBody {
         projectiles.push(new Projectile({
           x: this.pos.x,
           y: this.pos.y,
-          vx: Math.cos(daggerAngle) * 750,
-          vy: Math.sin(daggerAngle) * 750,
+          vx: Math.cos(daggerAngle) * 780,
+          vy: Math.sin(daggerAngle) * 780,
           radius: 8,
-          damage: 180,
+          damage: 190,
           team: this.team,
-          life: 2.2,
+          life: 2.0,
           type: 'dagger',
           color: '#e040fb',
           source: this,
@@ -528,60 +583,58 @@ class Hero extends RigidBody {
       }
       const x1 = this.pos.x + aimVec.x * 25;
       const y1 = this.pos.y + aimVec.y * 25;
-      const x2 = this.pos.x + aimVec.x * 2200;
-      const y2 = this.pos.y + aimVec.y * 2200;
+      const x2 = this.pos.x + aimVec.x * 2400;
+      const y2 = this.pos.y + aimVec.y * 2400;
 
       if (particleSystem) {
         particleSystem.addBeam({
           x1, y1, x2, y2,
-          width: 22,
+          width: 24,
           color: '#00f3ff',
           coreColor: '#ffffff',
-          life: 0.5,
+          life: 0.55,
         });
       }
 
-      // Massive backward recoil!
-      this.applyRecoil(new Vec2(aimVec.x * 48000, aimVec.y * 48000));
+      this.applyRecoil(new Vec2(aimVec.x * 52000, aimVec.y * 52000));
 
-      // Instant piercing damage raycast to enemies and destructible platforms
       projectiles.push(new Projectile({
         x: x1,
         y: y1,
-        vx: aimVec.x * 2400,
-        vy: aimVec.y * 2400,
-        radius: 20,
-        damage: 950,
+        vx: aimVec.x * 2600,
+        vy: aimVec.y * 2600,
+        radius: 24,
+        damage: 1050,
         team: this.team,
-        life: 0.4,
+        life: 0.45,
         color: '#00f3ff',
         source: this,
       }));
     } else if (this.id === 'orion') {
       // Event Horizon: Gravitational Black Hole
       if (window.soundEngine) window.soundEngine.playSingularity();
-      const targetX = this.pos.x + aimVec.x * 350;
-      const targetY = this.pos.y + aimVec.y * 350;
+      const targetX = this.pos.x + aimVec.x * 360;
+      const targetY = this.pos.y + aimVec.y * 360;
 
       world.gravityWells.push({
         x: targetX,
         y: targetY,
-        radius: 400,
-        strength: 1200000,
+        radius: 420,
+        strength: 1300000,
         active: true,
-        timer: 3.5,
+        timer: 3.8,
       });
 
       if (particleSystem) {
-        particleSystem.emitExplosion(targetX, targetY, 35, '#7c4dff');
+        particleSystem.emitExplosion(targetX, targetY, 40, '#7c4dff');
       }
     } else if (this.id === 'chronia') {
       // Timeline Paradox Weave: Supercharge self & all friendly clones
       if (window.soundEngine) window.soundEngine.playVictory();
-      this.shield += 800;
-      this.heal(500);
+      this.shield += 850;
+      this.heal(600);
       if (particleSystem) {
-        particleSystem.emitExplosion(this.pos.x, this.pos.y, 30, '#00ffc2');
+        particleSystem.emitExplosion(this.pos.x, this.pos.y, 32, '#00ffc2');
       }
     }
   }
@@ -596,7 +649,7 @@ class Hero extends RigidBody {
     if (this.cables.length > 0) {
       for (const cable of this.cables) {
         ctx.strokeStyle = '#00f3ff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(cable.anchor.x - this.pos.x, cable.anchor.y - this.pos.y);
@@ -604,13 +657,39 @@ class Hero extends RigidBody {
       }
     }
 
+    // Draw Chronia's Causality Aura
+    if (this.id === 'chronia') {
+      ctx.strokeStyle = 'rgba(0, 255, 194, 0.28)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.arc(0, 0, 220 + Math.sin(this.auraPulse) * 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Draw Orion's Orbiting Spheres
+    if (this.id === 'orion') {
+      for (let i = 0; i < 3; i++) {
+        const ang = this.orbitAngle + (i * Math.PI * 2) / 3;
+        const ox = Math.cos(ang) * 34;
+        const oy = Math.sin(ang) * 34;
+        ctx.fillStyle = '#b388ff';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#d500f9';
+        ctx.beginPath();
+        ctx.arc(ox, oy, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // Holographic shimmer / Chromatic aberration rim-light for replaying clones
     if (this.isClone) {
-      ctx.shadowBlur = 18;
+      ctx.shadowBlur = 20;
       ctx.shadowColor = this.team === 'player' ? '#00e5ff' : '#ff0055';
     }
 
-    // Hero Outer Hull / Shield
+    // Hero Outer Hull
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -627,7 +706,7 @@ class Hero extends RigidBody {
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(Math.cos(this.aimAngle) * (this.radius + 14), Math.sin(this.aimAngle) * (this.radius + 14));
+    ctx.lineTo(Math.cos(this.aimAngle) * (this.radius + 15), Math.sin(this.aimAngle) * (this.radius + 15));
     ctx.stroke();
 
     // Shield Aura if active
@@ -640,7 +719,7 @@ class Hero extends RigidBody {
     }
 
     // Health Bar
-    const barW = 46;
+    const barW = 48;
     const barH = 6;
     const hpRatio = Math.max(0, this.hp / this.maxHp);
     ctx.fillStyle = '#222222';
@@ -672,10 +751,10 @@ const HERO_ROSTER = {
     shield: 600,
     mass: 180,
     radius: 24,
-    thrust: 19000,
-    tacticalCd: 7.0,
-    ultimateCd: 24.0,
-    basicAttackRate: 0.5,
+    thrust: 19500,
+    tacticalCd: 6.5,
+    ultimateCd: 22.0,
+    basicAttackRate: 0.48,
     color: '#ff9800',
     secondaryColor: '#fff3e0',
   },
@@ -688,9 +767,9 @@ const HERO_ROSTER = {
     shield: 200,
     mass: 65,
     radius: 17,
-    thrust: 26000,
-    tacticalCd: 4.5,
-    ultimateCd: 18.0,
+    thrust: 27000,
+    tacticalCd: 4.0,
+    ultimateCd: 17.0,
     basicAttackRate: 0.28,
     color: '#e040fb',
     secondaryColor: '#f3e5f5',
@@ -704,9 +783,9 @@ const HERO_ROSTER = {
     shield: 150,
     mass: 70,
     radius: 18,
-    thrust: 21000,
+    thrust: 21500,
     tacticalCd: 5.0,
-    ultimateCd: 26.0,
+    ultimateCd: 25.0,
     basicAttackRate: 0.35,
     color: '#00e5ff',
     secondaryColor: '#e0f7fa',
@@ -720,9 +799,9 @@ const HERO_ROSTER = {
     shield: 300,
     mass: 75,
     radius: 18,
-    thrust: 20000,
-    tacticalCd: 7.5,
-    ultimateCd: 28.0,
+    thrust: 20500,
+    tacticalCd: 7.0,
+    ultimateCd: 26.0,
     basicAttackRate: 0.4,
     color: '#7c4dff',
     secondaryColor: '#ede7f6',
@@ -736,9 +815,9 @@ const HERO_ROSTER = {
     shield: 400,
     mass: 68,
     radius: 18,
-    thrust: 22000,
-    tacticalCd: 6.0,
-    ultimateCd: 30.0,
+    thrust: 22500,
+    tacticalCd: 5.5,
+    ultimateCd: 28.0,
     basicAttackRate: 0.35,
     color: '#00ffc2',
     secondaryColor: '#e0f2f1',

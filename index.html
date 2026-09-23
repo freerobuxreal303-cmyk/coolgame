@@ -145,10 +145,20 @@
       <div id="hud-drift-status" class="hud-drift-status">RCS DAMPING [ACTIVE]</div>
     </div>
 
+    <!-- Top Center: Radar Minimap -->
+    <div class="glass-panel hud-top-center">
+      <div class="minimap-header">TACTICAL RADAR</div>
+      <canvas id="minimap-canvas" width="200" height="92"></canvas>
+    </div>
+
     <!-- Top Right: Match Loop & Timer -->
     <div class="glass-panel hud-top-right">
       <div id="hud-timer" class="hud-timer">00:30</div>
       <div id="hud-loop" class="hud-loop">LOOP 1 / 5</div>
+      <div style="margin-top: 6px; display: flex; gap: 6px; justify-content: flex-end;">
+        <button id="btn-hud-sound" class="btn-tiny">🔊 MUTE</button>
+        <button id="btn-hud-help" class="btn-tiny">❓ HELP</button>
+      </div>
     </div>
 
     <!-- Bottom: Timeline Tracker & Ability Hotbar -->
@@ -184,6 +194,27 @@
           <span>Mag-Anchor</span>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- In-Game Quick Help Overlay -->
+  <div id="help-overlay" class="overlay-screen" style="display: none;">
+    <div class="glass-panel title-box" style="max-width: 650px;">
+      <h2 class="game-title" style="font-size: 32px;">COMMAND BRIEFING</h2>
+      <div class="controls-summary" style="margin-top: 16px;">
+        <div><strong>W A S D</strong> RCS Thrusters</div>
+        <div><strong>MOUSE</strong> Aim Direction</div>
+        <div><strong>LEFT CLICK</strong> Basic Attack</div>
+        <div><strong>RIGHT / Q</strong> Tactical Ability</div>
+        <div><strong>E / R</strong> Ultimate Ability</div>
+        <div><strong>SHIFT</strong> Newton Drift Mode</div>
+        <div><strong>SPACE / G</strong> Mag-Boots Surface Lock</div>
+        <div><strong>H</strong> Toggle Help Overlay</div>
+      </div>
+      <p style="font-size: 13px; color: #b0bec5; margin: 16px 0; line-height: 1.5;">
+        <strong>Tactical Hint:</strong> Destroy forward enemy turrets first to lower the shield barrier protecting the enemy Nexus Core!
+      </p>
+      <button id="btn-close-help" class="btn-primary">RESUME COMBAT</button>
     </div>
   </div>
 
@@ -223,6 +254,11 @@
       const btnRestart = document.getElementById('btn-restart');
       const heroCards = document.querySelectorAll('.hero-card');
 
+      const btnHudSound = document.getElementById('btn-hud-sound');
+      const btnHudHelp = document.getElementById('btn-hud-help');
+      const helpOverlay = document.getElementById('help-overlay');
+      const btnCloseHelp = document.getElementById('btn-close-help');
+
       let currentSelectedHero = 'ares';
 
       btnStart.addEventListener('click', () => {
@@ -234,13 +270,41 @@
         game.startMatch();
       });
 
+      function updateSoundBtnText() {
+        if (!window.soundEngine) return;
+        const muted = window.soundEngine.isMuted;
+        if (btnAudio) btnAudio.innerText = muted ? '🔇 SOUND: OFF' : '🔊 SOUND: ON';
+        if (btnHudSound) btnHudSound.innerText = muted ? '🔇 UNMUTE' : '🔊 MUTE';
+      }
+
       btnAudio.addEventListener('click', () => {
         if (window.soundEngine) {
           window.soundEngine.init();
-          const muted = window.soundEngine.toggleMute();
-          btnAudio.innerText = muted ? '🔇 SOUND: OFF' : '🔊 SOUND: ON';
+          window.soundEngine.toggleMute();
+          updateSoundBtnText();
         }
       });
+
+      if (btnHudSound) {
+        btnHudSound.addEventListener('click', () => {
+          if (window.soundEngine) {
+            window.soundEngine.toggleMute();
+            updateSoundBtnText();
+          }
+        });
+      }
+
+      if (btnHudHelp) {
+        btnHudHelp.addEventListener('click', () => {
+          if (helpOverlay) helpOverlay.style.display = 'flex';
+        });
+      }
+
+      if (btnCloseHelp) {
+        btnCloseHelp.addEventListener('click', () => {
+          if (helpOverlay) helpOverlay.style.display = 'none';
+        });
+      }
 
       heroCards.forEach(card => {
         card.addEventListener('click', () => {
@@ -250,7 +314,6 @@
         });
       });
 
-      // Select first card by default
       if (heroCards.length > 0) heroCards[0].classList.add('selected');
 
       btnConfirmHero.addEventListener('click', () => {
@@ -261,6 +324,11 @@
         document.getElementById('game-over-modal').style.display = 'none';
         game.startMatch();
       });
+
+      // Heartbeat pinger to keep game.exe alive
+      setInterval(() => {
+        fetch('/api/heartbeat').catch(() => {});
+      }, 1500);
     });
   </script>
 </body>

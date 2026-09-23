@@ -1,5 +1,5 @@
 // Zero-G Tactics: Chrono Legends - Master Game Loop & State Manager
-// Coordinates physics, recording, replays, camera, input, and victory/defeat cycles.
+// Coordinates physics, recording, replays, camera, floating combat text, minimap, and victory/defeat cycles.
 
 const GAME_STATES = {
   MENU: 'MENU',
@@ -8,6 +8,42 @@ const GAME_STATES = {
   REWIND: 'REWIND',
   GAME_OVER: 'GAME_OVER',
 };
+
+class FloatingText {
+  constructor(x, y, text, color = '#ffffff', isCrit = false) {
+    this.x = x + (Math.random() - 0.5) * 20;
+    this.y = y;
+    this.text = text;
+    this.color = color;
+    this.isCrit = isCrit;
+    this.life = 0.85;
+    this.maxLife = this.life;
+    this.vy = isCrit ? -60 : -40;
+    this.isDead = false;
+  }
+
+  update(dt) {
+    this.life -= dt;
+    if (this.life <= 0) {
+      this.isDead = true;
+      return;
+    }
+    this.y += this.vy * dt;
+  }
+
+  render(ctx) {
+    const alpha = Math.max(0, this.life / this.maxLife);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = this.isCrit ? 'bold 18px monospace' : 'bold 13px monospace';
+    ctx.fillStyle = this.color;
+    ctx.shadowBlur = this.isCrit ? 12 : 6;
+    ctx.shadowColor = this.color;
+    ctx.textAlign = 'center';
+    ctx.fillText(this.text, this.x, this.y);
+    ctx.restore();
+  }
+}
 
 class Game {
   constructor(canvas) {
@@ -20,6 +56,7 @@ class Game {
     this.arena = new Arena(2400, 1100);
     this.chrono = new ChronoManager();
     this.particles = new ParticleSystem(1500);
+    this.floatingTexts = [];
 
     // Populate world platforms and repulsors
     for (const p of this.arena.platforms) this.world.addPlatform(p);
@@ -39,6 +76,13 @@ class Game {
     this.rewindTimer = 0;
     this.gameOverResult = null; // 'VICTORY' or 'DEFEAT'
     this.selectedHeroId = 'ares';
+
+    // Announcement banner
+    this.announcement = { text: '', timer: 0 };
+
+    // Minimap canvas
+    this.minimapCanvas = document.getElementById('minimap-canvas');
+    this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
 
     // Event hooks
     this.bindEvents();
@@ -66,6 +110,13 @@ class Game {
 
       if (e.key === ' ' || e.key.toLowerCase() === 'g') {
         if (this.activeHero) this.activeHero.tryAnchor = true;
+      }
+
+      if (e.key.toLowerCase() === 'h') {
+        const helpOverlay = document.getElementById('help-overlay');
+        if (helpOverlay) {
+          helpOverlay.style.display = helpOverlay.style.display === 'flex' ? 'none' : 'flex';
+        }
       }
     });
 
@@ -98,6 +149,14 @@ class Game {
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  showAnnouncement(text, duration = 3.0) {
+    this.announcement = { text, timer: duration };
+  }
+
+  addCombatText(x, y, text, color = '#ffffff', isCrit = false) {
+    this.floatingTexts.push(new FloatingText(x, y, text, color, isCrit));
+  }
+
   startMatch() {
     this.chrono.resetAll();
     this.arena = new Arena(2400, 1100);
@@ -119,6 +178,11 @@ class Game {
     this.state = GAME_STATES.PLAYING;
     this.hideHeroSelectUI();
 
+    // Clean reset physics bodies to avoid accumulating stale instances
+    this.world.bodies = [];
+    this.projectiles = [];
+    this.floatingTexts = [];
+
     const startX = 220;
     const startY = 550 + (Math.random() - 0.5) * 80;
 
@@ -137,23 +201,30 @@ class Game {
       this.world.addBody(clone);
     }
 
-    // Setup enemy AI defenders/counter-clones
+    // Setup enemy AI defenders
     this.spawnEnemyDefenders();
 
     // Start recording for current loop
     this.chrono.startLoop(this.selectedHeroId, { x: startX, y: startY });
+
+    // Announce loop deployment
+    if (this.chrono.currentLoop === 1) {
+      this.showAnnouncement('LOOP 1: INITIATING ZERO-G ASSAULT', 3.2);
+    } else {
+      this.showAnnouncement(`LOOP ${this.chrono.currentLoop}: ${this.clones.length} CHRONO CLONES DEPLOYED!`, 3.5);
+    }
   }
 
   spawnEnemyDefenders() {
     this.enemyClones = [];
-    const enemyConfigs = ['ares', 'vectra', 'artemis', 'orion', 'chronia'];
+    const enemyTypes = ['ares', 'vectra', 'artemis', 'orion', 'chronia'];
     const count = Math.min(5, this.chrono.currentLoop + 1);
 
     for (let i = 0; i < count; i++) {
-      const type = enemyConfigs[i % enemyConfigs.length];
+      const type = enemyTypes[i % enemyTypes.length];
       const cfg = HERO_ROSTER[type];
-      const ex = 2180;
-      const ey = 320 + i * 150;
+      const ex = 2160;
+      const ey = 300 + i * 140;
       const enemy = new Hero(cfg, ex, ey, 'enemy', true);
       this.enemyClones.push(enemy);
       this.world.addBody(enemy);
@@ -183,7 +254,6 @@ class Game {
       input.aimAngle = Math.atan2(worldMouseY - this.activeHero.pos.y, worldMouseX - this.activeHero.pos.x);
     }
 
-    // Sound engine thrust feedback
     if (window.soundEngine) {
       const isThrusting = input.thrust.x !== 0 || input.thrust.y !== 0;
       window.soundEngine.setThrust(isThrusting);
@@ -198,17 +268,24 @@ class Game {
     if (window.soundEngine) window.soundEngine.playRewind();
     this.chrono.endLoop();
 
-    // Clean up active bodies from world
-    if (this.activeHero) this.world.removeBody(this.activeHero);
-    for (const c of this.clones) this.world.removeBody(c);
-    for (const e of this.enemyClones) this.world.removeBody(e);
+    this.world.bodies = [];
     this.projectiles = [];
   }
 
   stepSimulation() {
     if (this.state !== GAME_STATES.PLAYING) return;
 
-    // 1. Player Input & Recording
+    // Advance announcement banner timer
+    if (this.announcement.timer > 0) {
+      this.announcement.timer -= this.fixedDelta;
+    }
+
+    const allAllies = [
+      ...(this.activeHero ? [this.activeHero] : []),
+      ...this.clones,
+    ];
+
+    // 1. Active Player Input & Recording
     const playerInput = this.handlePlayerInput();
     if (this.activeHero && !this.activeHero.isDead) {
       this.chrono.recordTick(playerInput, {
@@ -217,42 +294,79 @@ class Game {
         hp: this.activeHero.hp,
       });
 
-      this.activeHero.updateHero(this.fixedDelta, playerInput, this.world, this.projectiles, this.particles);
+      this.activeHero.updateHero(this.fixedDelta, playerInput, this.world, this.projectiles, this.particles, allAllies);
     }
 
-    // 2. Friendly Replay Clones
+    // 2. Friendly Replay Clones with safe boundary handling
     const curTick = this.chrono.currentTick;
     for (const clone of this.clones) {
       if (clone.isDead) continue;
       const rec = clone.recordingData;
-      if (rec && rec.inputFrames[curTick]) {
-        const frame = rec.inputFrames[curTick];
-        clone.updateHero(this.fixedDelta, frame, this.world, this.projectiles, this.particles);
+      const frame = rec ? rec.getFrame(curTick) : null;
+      if (!frame) {
+        // Timeline completed for this clone
+        clone.isDead = true;
+        this.particles.emitChronoTrail(clone.pos.x, clone.pos.y, clone.color);
+        continue;
       }
+      clone.updateHero(this.fixedDelta, frame, this.world, this.projectiles, this.particles, allAllies);
     }
 
-    // 3. Enemy AI Defenders
+    // 3. Smart Enemy AI Defenders
     for (const enemy of this.enemyClones) {
       if (enemy.isDead) continue;
-      // Simple tactical zero-G AI behavior
-      const target = this.activeHero && !this.activeHero.isDead ? this.activeHero : (this.clones[0] || null);
-      if (target) {
-        const dx = target.pos.x - enemy.pos.x;
-        const dy = target.pos.y - enemy.pos.y;
-        const dist = Math.hypot(dx, dy);
-        const aimAngle = Math.atan2(dy, dx);
 
-        const aiInput = {
-          thrust: { x: dist > 350 ? Math.sign(dx) * 0.8 : -Math.sign(dx) * 0.4, y: Math.sign(dy) * 0.5 },
-          aimAngle,
-          driftMode: false,
-          basicAttack: dist < 500 && Math.random() < 0.08,
-          tacticalSkill: dist < 400 && enemy.tacticalCd <= 0,
-          ultimate: dist < 350 && enemy.ultimateCd <= 0,
-        };
-
-        enemy.updateHero(this.fixedDelta, aiInput, this.world, this.projectiles, this.particles);
+      // Target selection: active player > nearest clone > core
+      let target = null;
+      let minTargetDist = 800;
+      if (this.activeHero && !this.activeHero.isDead) {
+        target = this.activeHero;
+        minTargetDist = Math.hypot(target.pos.x - enemy.pos.x, target.pos.y - enemy.pos.y);
+      } else {
+        for (const c of this.clones) {
+          if (c.isDead) continue;
+          const d = Math.hypot(c.pos.x - enemy.pos.x, c.pos.y - enemy.pos.y);
+          if (d < minTargetDist) {
+            minTargetDist = d;
+            target = c;
+          }
+        }
       }
+
+      let dx = -1;
+      let dy = 0;
+      let dist = 600;
+
+      if (target) {
+        dx = target.pos.x - enemy.pos.x;
+        dy = target.pos.y - enemy.pos.y;
+        dist = Math.hypot(dx, dy);
+      } else {
+        // Push toward player core
+        dx = this.arena.playerCore.x - enemy.pos.x;
+        dy = this.arena.playerCore.y - enemy.pos.y;
+        dist = Math.hypot(dx, dy);
+      }
+
+      // Lead aiming calculation
+      const leadTime = dist / 850;
+      const aimTargetX = target ? target.pos.x + (target.vel ? target.vel.x * leadTime * 0.5 : 0) : enemy.pos.x + dx;
+      const aimTargetY = target ? target.pos.y + (target.vel ? target.vel.y * leadTime * 0.5 : 0) : enemy.pos.y + dy;
+      const aimAngle = Math.atan2(aimTargetY - enemy.pos.y, aimTargetX - enemy.pos.x);
+
+      const aiInput = {
+        thrust: {
+          x: dist > 380 ? Math.sign(dx) * 0.8 : -Math.sign(dx) * 0.4,
+          y: Math.sign(dy) * 0.6,
+        },
+        aimAngle,
+        driftMode: false,
+        basicAttack: dist < 550 && Math.random() < 0.1,
+        tacticalSkill: dist < 420 && enemy.tacticalCd <= 0,
+        ultimate: dist < 360 && enemy.ultimateCd <= 0,
+      };
+
+      enemy.updateHero(this.fixedDelta, aiInput, this.world, this.projectiles, this.particles, this.enemyClones);
     }
 
     // 4. Update Physics World
@@ -266,7 +380,7 @@ class Game {
     ];
     this.arena.update(this.fixedDelta, allHeroes, this.projectiles, window.soundEngine);
 
-    // 6. Update Projectiles & Collisions
+    // 6. Update Projectiles & Combat Interactions
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.update(this.fixedDelta, this.world, allHeroes);
@@ -275,11 +389,12 @@ class Game {
       for (const h of allHeroes) {
         if (h.isDead) continue;
         if (p.team === h.team) {
-          // Friendly hit: check Chronia heal dart
+          // Friendly Chronia heal dart
           if (p.type === 'chrono_dart' && p.source !== h) {
             const d = Math.hypot(p.x - h.pos.x, p.y - h.pos.y);
             if (d < p.radius + h.radius) {
-              h.heal(120);
+              const healed = h.heal(140);
+              if (healed > 0) this.addCombatText(h.pos.x, h.pos.y - 20, `+${Math.ceil(healed)}`, '#00ffc2');
               p.isDead = true;
               break;
             }
@@ -289,19 +404,22 @@ class Game {
 
         const d = Math.hypot(p.x - h.pos.x, p.y - h.pos.y);
         if (d < p.radius + h.radius) {
-          h.takeDamage(p.damage, p.source);
+          const dmg = h.takeDamage(p.damage, p.source);
+          const isCrit = p.damage > 300;
+          this.addCombatText(h.pos.x, h.pos.y - 15, `-${Math.ceil(dmg)}`, isCrit ? '#ff1744' : '#ff9100', isCrit);
           this.particles.emitSparks(p.x, p.y, 8, p.color);
-          this.camera.shake = Math.min(12, this.camera.shake + 3);
+          this.camera.shake = Math.min(12, this.camera.shake + 3.5);
 
           if (p.type === 'stasis') {
             h.stunTimer = 1.8;
             h.vel.set(0, 0);
+            this.addCombatText(h.pos.x, h.pos.y - 30, 'STUNNED!', '#00e5ff', true);
           } else if (p.type === 'harpoon') {
-            // Franco hook pull
             if (p.source && !p.source.isDead) {
-              h.pos.x = p.source.pos.x + 40;
+              h.pos.x = p.source.pos.x + 45;
               h.pos.y = p.source.pos.y;
               h.vel.set(0, 0);
+              this.addCombatText(h.pos.x, h.pos.y - 30, 'HOOKED!', '#ffea00', true);
             }
           }
 
@@ -316,8 +434,12 @@ class Game {
         for (const t of this.arena.turrets) {
           if (t.isDead || t.team === p.team) continue;
           if (Math.hypot(p.x - t.x, p.y - t.y) < p.radius + t.radius) {
-            t.takeDamage(p.damage);
+            const dmg = t.takeDamage(p.damage);
+            this.addCombatText(t.x, t.y - 20, `-${Math.ceil(dmg)}`, '#ff9100');
             this.particles.emitSparks(p.x, p.y, 10, '#ffffff');
+            if (t.isDead) {
+              this.showAnnouncement(t.team === 'enemy' ? 'ENEMY DEFENSE TURRET DESTROYED!' : 'OUR DEFENSE TURRET HAS FALLEN!', 3.0);
+            }
             p.isDead = true;
             break;
           }
@@ -326,7 +448,8 @@ class Game {
         // Cores
         const targetCore = p.team === 'player' ? this.arena.enemyCore : this.arena.playerCore;
         if (!targetCore.isDead && Math.hypot(p.x - targetCore.x, p.y - targetCore.y) < p.radius + targetCore.radius) {
-          targetCore.takeDamage(p.damage);
+          const dmg = targetCore.takeDamage(p.damage);
+          this.addCombatText(targetCore.x, targetCore.y - 30, `-${Math.ceil(dmg)}`, targetCore.shieldActive ? '#78909c' : '#ff1744', true);
           this.particles.emitSparks(p.x, p.y, 14, '#ffffff');
           p.isDead = true;
         }
@@ -337,8 +460,12 @@ class Game {
       }
     }
 
-    // 7. Update Particles
+    // 7. Update Particles & Floating Text
     this.particles.update(this.fixedDelta);
+    for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+      this.floatingTexts[i].update(this.fixedDelta);
+      if (this.floatingTexts[i].isDead) this.floatingTexts.splice(i, 1);
+    }
 
     // 8. Check Victory / Defeat Conditions
     if (this.arena.enemyCore.isDead) {
@@ -366,7 +493,6 @@ class Game {
         this.chrono.currentLoop++;
         this.triggerTimeRewind();
       } else {
-        // All 5 loops completed; determine winner by highest base HP
         this.state = GAME_STATES.GAME_OVER;
         this.gameOverResult = this.arena.enemyCore.hp < this.arena.playerCore.hp ? 'VICTORY' : 'DEFEAT';
         if (this.gameOverResult === 'VICTORY') {
@@ -418,6 +544,7 @@ class Game {
 
     this.updateCamera();
     this.render();
+    this.renderMinimap();
     this.updateHUD();
 
     requestAnimationFrame((t) => this.loop(t));
@@ -464,7 +591,34 @@ class Game {
     // Render Particles
     this.particles.render(ctx);
 
+    // Render Floating Damage Numbers
+    for (const ft of this.floatingTexts) ft.render(ctx);
+
     ctx.restore();
+
+    // Render Announcement Banner
+    if (this.announcement.timer > 0) {
+      ctx.save();
+      const alpha = Math.min(1, this.announcement.timer * 2);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = 'rgba(10, 25, 47, 0.85)';
+      ctx.strokeStyle = '#00f3ff';
+      ctx.lineWidth = 2;
+      const boxW = 540;
+      const boxH = 46;
+      const boxX = (this.canvas.width - boxW) / 2;
+      const boxY = 82;
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 15px monospace';
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#00f3ff';
+      ctx.fillText(this.announcement.text, this.canvas.width / 2, boxY + 28);
+      ctx.restore();
+    }
 
     // Render Time-Rewind Effect overlay
     if (this.state === GAME_STATES.REWIND) {
@@ -477,6 +631,67 @@ class Game {
       ctx.textAlign = 'center';
       ctx.fillText('<< TEMPORAL REWIND: RESETTING TO T=0 <<', this.canvas.width / 2, this.canvas.height / 2);
     }
+  }
+
+  renderMinimap() {
+    if (!this.minimapCtx || this.state !== GAME_STATES.PLAYING) return;
+    const mctx = this.minimapCtx;
+    const mw = this.minimapCanvas.width;
+    const mh = this.minimapCanvas.height;
+
+    mctx.clearRect(0, 0, mw, mh);
+    mctx.fillStyle = 'rgba(6, 12, 24, 0.88)';
+    mctx.fillRect(0, 0, mw, mh);
+
+    const scaleX = mw / this.arena.width;
+    const scaleY = mh / this.arena.height;
+
+    // Draw Cores
+    mctx.fillStyle = '#00e5ff';
+    mctx.beginPath();
+    mctx.arc(this.arena.playerCore.x * scaleX, this.arena.playerCore.y * scaleY, 4, 0, Math.PI * 2);
+    mctx.fill();
+
+    mctx.fillStyle = '#ff1744';
+    mctx.beginPath();
+    mctx.arc(this.arena.enemyCore.x * scaleX, this.arena.enemyCore.y * scaleY, 4, 0, Math.PI * 2);
+    mctx.fill();
+
+    // Draw Turrets
+    for (const t of this.arena.turrets) {
+      if (t.isDead) continue;
+      mctx.fillStyle = t.team === 'player' ? '#00e676' : '#d50000';
+      mctx.fillRect(t.x * scaleX - 2.5, t.y * scaleY - 2.5, 5, 5);
+    }
+
+    // Draw Friendly Clones
+    mctx.fillStyle = '#80d8ff';
+    for (const c of this.clones) {
+      if (c.isDead) continue;
+      mctx.fillRect(c.pos.x * scaleX - 1.5, c.pos.y * scaleY - 1.5, 3, 3);
+    }
+
+    // Draw Active Hero
+    if (this.activeHero && !this.activeHero.isDead) {
+      mctx.fillStyle = '#ffffff';
+      mctx.shadowBlur = 6;
+      mctx.shadowColor = '#00f3ff';
+      mctx.beginPath();
+      mctx.arc(this.activeHero.pos.x * scaleX, this.activeHero.pos.y * scaleY, 3, 0, Math.PI * 2);
+      mctx.fill();
+    }
+
+    // Draw Enemy Heroes
+    mctx.fillStyle = '#ff5252';
+    for (const e of this.enemyClones) {
+      if (e.isDead) continue;
+      mctx.fillRect(e.pos.x * scaleX - 1.5, e.pos.y * scaleY - 1.5, 3, 3);
+    }
+
+    // Draw Viewport Camera Box
+    mctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    mctx.lineWidth = 1;
+    mctx.strokeRect(this.camera.x * scaleX, this.camera.y * scaleY, this.canvas.width * scaleX, this.canvas.height * scaleY);
   }
 
   updateHUD() {
@@ -497,7 +712,7 @@ class Game {
         if (hpEl) hpEl.style.width = `${Math.max(0, (this.activeHero.hp / this.activeHero.maxHp) * 100)}%`;
         if (hpText) hpText.innerText = `${Math.ceil(this.activeHero.hp)} / ${this.activeHero.maxHp} HP`;
         if (fuelEl) fuelEl.style.width = `${this.activeHero.fuel}%`;
-        if (driftEl) driftEl.innerText = this.activeHero.driftMode ? 'DRIFT MODE [ACTIVE]' : 'RCS DAMPING [ACTIVE]';
+        if (driftEl) driftEl.innerText = this.activeHero.driftMode ? 'DRIFT MODE [ACTIVE - 0 DAMPING]' : 'RCS DAMPING [ACTIVE]';
         if (heroNameEl) heroNameEl.innerText = `${this.activeHero.name} (${this.activeHero.role})`;
 
         // Cooldowns

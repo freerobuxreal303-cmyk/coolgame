@@ -12,7 +12,7 @@
   --amber: #ffaa00;
   --green: #00ff88;
   --red: #ff1744;
-  --font-main: 'Outfit', sans-serif;
+  --font-main: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
 
@@ -148,6 +148,24 @@ body, html {
 
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.16);
+  border-color: var(--cyan);
+}
+
+.btn-tiny {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-tiny:hover {
+  background: rgba(0, 229, 255, 0.25);
   border-color: var(--cyan);
 }
 
@@ -320,6 +338,32 @@ body, html {
   font-size: 11px;
   font-family: var(--font-mono);
   color: #80d8ff;
+}
+
+/* Top Center Radar Minimap */
+.hud-top-center {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  pointer-events: auto;
+  text-align: center;
+}
+
+.minimap-header {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 1.5px;
+  color: #80d8ff;
+  margin-bottom: 4px;
+}
+
+#minimap-canvas {
+  display: block;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  border-radius: 4px;
+  background: #040810;
 }
 
 .hud-top-right {

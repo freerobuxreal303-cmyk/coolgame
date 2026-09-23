@@ -11,7 +11,9 @@ namespace CoolGameLauncher
     {
         private static HttpListener _listener;
         private static string _baseDir;
-        private static bool _running = true;
+        private static volatile bool _running = true;
+        private static DateTime _lastHeartbeat = DateTime.UtcNow;
+        private static bool _heartbeatReceivedOnce = false;
 
         [STAThread]
         static void Main(string[] args)
@@ -29,38 +31,37 @@ namespace CoolGameLauncher
                 serverThread.IsBackground = true;
                 serverThread.Start();
 
+                Thread watchdogThread = new Thread(WatchdogWorker);
+                watchdogThread.IsBackground = true;
+                watchdogThread.Start();
+
                 string gameUrl = "http://127.0.0.1:" + port + "/index.html";
                 string browserPath = FindBrowserExecutable();
 
-                Process gameProcess = null;
                 string tempProfile = Path.Combine(Path.GetTempPath(), "coolgame_edge_profile");
 
                 if (!string.IsNullOrEmpty(browserPath))
                 {
                     ProcessStartInfo psi = new ProcessStartInfo();
                     psi.FileName = browserPath;
-                    psi.Arguments = string.Format("--app=\"{0}\" --window-size=1280,768 --user-data-dir=\"{1}\" --disable-features=TranslateUI --disable-extensions", gameUrl, tempProfile);
+                    psi.Arguments = string.Format("--app=\"{0}\" --window-size=1280,768 --user-data-dir=\"{1}\" --no-first-run --no-default-browser-check --disable-features=TranslateUI --disable-extensions", gameUrl, tempProfile);
                     psi.UseShellExecute = false;
-                    gameProcess = Process.Start(psi);
+                    Process.Start(psi);
                 }
                 else
                 {
                     Process.Start(gameUrl);
                 }
 
-                if (gameProcess != null)
+                // Keep main thread running while the game window is active
+                while (_running)
                 {
-                    gameProcess.WaitForExit();
-                }
-                else
-                {
-                    // If launched via default shell, wait until user closes or 2 hours
-                    Thread.Sleep(7200000);
+                    Thread.Sleep(500);
                 }
             }
             catch (Exception)
             {
-                // Silently handle or fallback
+                // Silently handle
             }
             finally
             {
@@ -97,9 +98,42 @@ namespace CoolGameLauncher
             return null;
         }
 
+        private static void WatchdogWorker()
+        {
+            DateTime startTime = DateTime.UtcNow;
+            while (_running)
+            {
+                Thread.Sleep(1000);
+                TimeSpan elapsed = DateTime.UtcNow - startTime;
+
+                // After initial 25-second boot grace period:
+                if (elapsed.TotalSeconds > 25)
+                {
+                    if (_heartbeatReceivedOnce)
+                    {
+                        // If we received heartbeats before but haven't for > 7 seconds, user closed window!
+                        if ((DateTime.UtcNow - _lastHeartbeat).TotalSeconds > 7)
+                        {
+                            _running = false;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        // No heartbeat ever received after 45 seconds -> user closed or failed to open
+                        if (elapsed.TotalSeconds > 45)
+                        {
+                            _running = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         private static void ServerWorker()
         {
-            while (_running && _listener.IsListening)
+            while (_running && _listener != null && _listener.IsListening)
             {
                 try
                 {
@@ -118,12 +152,27 @@ namespace CoolGameLauncher
             HttpListenerContext context = (HttpListenerContext)state;
             try
             {
-                string rawUrl = context.Request.Url.AbsolutePath.TrimStart('/');
-                if (string.IsNullOrEmpty(rawUrl)) rawUrl = "index.html";
+                string rawUrl = context.Request.Url.AbsolutePath;
 
-                // Sanitize path against directory traversal
-                rawUrl = rawUrl.Replace('/', Path.DirectorySeparatorChar);
-                string filePath = Path.Combine(_baseDir, rawUrl);
+                // Heartbeat API endpoint
+                if (rawUrl.Equals("/api/heartbeat", StringComparison.OrdinalIgnoreCase))
+                {
+                    _lastHeartbeat = DateTime.UtcNow;
+                    _heartbeatReceivedOnce = true;
+                    byte[] response = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"alive\"}");
+                    context.Response.ContentType = "application/json";
+                    context.Response.ContentLength64 = response.Length;
+                    context.Response.AddHeader("Access-Control-Allow-Origin", "*");
+                    context.Response.OutputStream.Write(response, 0, response.Length);
+                    return;
+                }
+
+                // File Serving
+                string relativePath = rawUrl.TrimStart('/');
+                if (string.IsNullOrEmpty(relativePath)) relativePath = "index.html";
+
+                relativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
+                string filePath = Path.Combine(_baseDir, relativePath);
 
                 if (File.Exists(filePath))
                 {
@@ -140,7 +189,7 @@ namespace CoolGameLauncher
             }
             catch
             {
-                context.Response.StatusCode = 500;
+                try { context.Response.StatusCode = 500; } catch { }
             }
             finally
             {

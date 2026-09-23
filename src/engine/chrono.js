@@ -36,6 +36,13 @@ class TimelineRecording {
     this.totalTicks = tick + 1;
   }
 
+  getFrame(tick) {
+    if (tick >= 0 && tick < this.inputFrames.length) {
+      return this.inputFrames[tick];
+    }
+    return null;
+  }
+
   complete() {
     this.isCompleted = true;
   }
