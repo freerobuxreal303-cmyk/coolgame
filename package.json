@@ -1,0 +1,22 @@
+{
+  "name": "zero-g-tactics-chrono-legends",
+  "version": "1.0.0",
+  "description": "2D Action-Tactical Time-Loop Platformer / Hero Arena merging Clone Armies timeline mechanics with zero-G physics and MLBB-inspired hero synergies.",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve . -l 5000",
+    "build:exe": "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe /target:winexe /out:game.exe launcher.cs",
+    "test": "node --check src/engine/audio.js && node --check src/engine/physics.js && node --check src/engine/particles.js && node --check src/engine/chrono.js && node --check src/entities/heroes.js && node --check src/entities/arena.js && node --check src/game.js"
+  },
+  "keywords": [
+    "game",
+    "canvas",
+    "zero-g",
+    "time-loop",
+    "clone-armies",
+    "moba",
+    "mlbb"
+  ],
+  "author": "Charlie Mulya Putra",
+  "license": "MIT"
+}
